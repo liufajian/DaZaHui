@@ -1,0 +1,19 @@
+这种情况下的“调用成功”，并不是真正意义上的成功，而是 P/Invoke 在运行时没有做严格的参数数量校验，结果变成了一场“参数错位”的悲剧。
+
+为什么不会立刻报错？
+P/Invoke 的绑定发生在运行时，而非编译时。CLR 只会根据你在 [DllImport] 里指定的函数名（这里是 UFX_QryPosition31004）去 DLL 的导出表里查找。只要这个名字存在，CLR 就认为“找到了”，不会去比对你的 C# 方法签名和 C++ 里的真实参数列表。
+
+参数错位是如何发生的？
+C++ 的原函数声明是 void UFX_QryPosition31004(const char* asset_no, UfxRspMsg* rsp)，它期望接收两个参数。
+
+而你的 C# 声明传入了三个参数：
+
+csharp
+UFX_QryPosition31004(string account_code, string asset_no, ref HstRspMsg rsp)
+在 StdCall 调用约定下，参数是从右向左压入栈的。于是，传入的三个参数会按顺序被 C++ 函数“认领”：
+
+C++ 的第一个参数 asset_no，会拿到 C# 的第一个参数 account_code。
+
+C++ 的第二个参数 rsp，会拿到 C# 的第二个参数 asset_no（本来是个字符串，却被当成了结构体指针）。
+
+C# 的第三个参数 ref HstRspMsg rsp 被完全忽略，因为 C++ 函数根本不知道它的存在。
